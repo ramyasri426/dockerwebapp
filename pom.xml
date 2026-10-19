@@ -180,8 +180,8 @@
             </plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-war-plugin</artifactId>
-				<version>3.4.0</version> <!-- or latest stable -->
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.5.6</version> <!-- or latest stable -->
 			</plugin>
 		<!-- CODE COVERAGE -->
  		    <plugin>
