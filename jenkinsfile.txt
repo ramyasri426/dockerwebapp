@@ -1,0 +1,85 @@
+pipeline {
+    agent {
+        node {
+            label "prod"
+        }
+    }
+
+    tools {
+        maven "mymaven"
+    }
+
+    stages {
+        stage('code') {
+            steps {
+                git branch: 'master',
+                    url: 'https://github.com/ramyasri426/dockerwebapp.git'
+            }
+        }
+
+        stage('build') {
+            steps {
+                sh 'mvn clean install'
+            }
+        }
+
+        stage('CQA') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'sonar-token',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    withSonarQubeEnv('mysonar') {
+                        sh '''
+                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.8.0.7211:sonar \
+                            -Dsonar.projectKey=myproject \
+                            -Dsonar.token="$SONAR_TOKEN"
+                        '''
+                    }
+                }
+            }
+        }
+        stage ("QuatityGates") {
+            steps {
+                
+                    waitForQualityGate abortPipeline: true, credentialsId: 'sonar-token'
+                
+            }
+        }
+        stage ('arifact') {
+            steps {
+                nexusArtifactUploader artifacts: [[artifactId: 'vprofile', classifier: '', file: 'target/vprofile-v2.war', type: 'war']], credentialsId: 'nexus', groupId: 'com.visualpathit', nexusUrl: '15.134.38.2:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'myrepo', version: 'v2'
+            }
+        }
+        stage ('image') {
+            steps {
+                sh "cp -r target Docker-app"
+                sh 'docker build -t appimage Docker-app'
+                sh 'docker build -t dbimage Docker-db'
+            }
+        }
+        stage ("scanimages") {
+         steps {
+             sh "trivy image appimage >> appimage-report.txt"  
+             sh "trivy image dbimage >> dbimage-report.txt"  
+               }
+        } 
+        stage ('registry') {
+            steps {
+                script withDockerRegistry(credentialsId: 'dockerhub') {
+                sh "docker tag appimage ramyasri426/devops-project:javaapp"
+                sh "docker tag dbimage ramyasri426/devops-project:db"
+                sh "docker push ramyasri426/devops-project:javaapp"
+                sh "docker push ramyasri426/devops-project:db"
+                  }
+            }
+        }
+        stage ('deploy') {
+            steps {
+                sh "docker stack deploy myapp --compose-file=compose.yml"
+            }
+        }
+    }
+}
